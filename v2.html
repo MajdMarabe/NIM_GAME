@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>NIM's Game V2</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #fff3e6; /* Light orange background */
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #ff9900; /* Orange heading */
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin-top: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background-color: #ffcc66; /* Light orange button */
+            color: #fff;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #ff9933; /* Darker orange on hover */
+        }
+
+        label {
+            font-weight: bold;
+            color: #ff9900; /* Orange label */
+        }
+
+        select {
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ffcc66; /* Orange border */
+        }
+
+
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>NIM's Game V2</h1>
+        <button id="player-turn">Take Turn</button>
+        <button id="new-game">New Game</button>
+        <div class="ai-difficulty">
+            <label>AI diffeculty</label>
+            <select id="ai-difficulty">
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+            </select>
+        </div>
+        <div id="history">
+            <li>Number of rods in heap: <span id="heap-size"></span></li>
+            <ul id="history-list">
+            </ul>
+        </div>
+        <p id="message"></p>
+    </div>
+    <script type="text/javascript">
+        let heaps;
+        const historyList = document.getElementById('history-list');
+
+        const updateHistory = (player) => {
+            const li = document.createElement('li');
+            li.textContent = `${player} move: ${heaps.join(', ')}`;
+            historyList.appendChild(li);
+        };
+
+        const separatableHeaps = (heaps) => {
+            return heaps.some(heap => separatableHeap(heap)); // Heap with at least 3 rods is considered valid
+        };
+
+        const separatableHeap = (heap) => {
+            return heap >= 3; // Heap with at least 3 rods is considered valid
+        };
+
+        const evaluateHeaps = (heaps) => {
+            if (separatableHeaps(heaps)) {
+                return -1
+            }
+            return 1;
+        };
+
+        const alphaBeta = (heaps, depth, alpha, beta, maximizing) => {
+            if (depth === 0 || !separatableHeaps(heaps)) {
+                return evaluateHeaps(heaps);
+            }
+
+            if (maximizing) {
+                let value = Number.NEGATIVE_INFINITY;
+                let newHeaps = generateNewHeaps(heaps);
+
+                for (let heaps of newHeaps) {
+                    let newValue = alphaBeta(heaps, depth - 1, alpha, beta, false);
+                    value = Math.max(value, newValue);
+                    alpha = Math.max(alpha, value);
+
+                    if (beta <= alpha) {
+                        break;
+                    }
+                }
+                return value;
+            } else {
+                let value = Number.POSITIVE_INFINITY;
+                let newHeaps = generateNewHeaps(heaps);
+
+                for (let heaps of newHeaps) {
+                    let newValue = alphaBeta(heaps, depth - 1, alpha, beta, true);
+                    value = Math.min(value, newValue);
+                    beta = Math.min(beta, value);
+
+                    if (beta <= alpha) {
+                        break;
+                    }
+                }
+                return value;
+            }
+        };
+
+        const isValidSeparation = (heap, separation1) => {
+            let separation2 = heap - separation1;
+            return separation1 !== separation2 && separation1 >= 1 && separation2 >= 1;
+        };
+
+        const getDepthForDifficulty = () => {
+            const aiDifficulty = document.getElementById('ai-difficulty').value;
+            switch (aiDifficulty) {
+                case 'Easy':
+                    return 2;
+                case 'Hard':
+                    return 8;
+                default:
+                    return 5;
+            }
+        };
+
+        const getBestPossibleHeap = (heaps) => {
+            let bestHeap = null;
+            let alpha = Number.NEGATIVE_INFINITY;
+            let beta = Number.POSITIVE_INFINITY;
+            let newHeaps = generateNewHeaps(heaps);
+            bestHeap = newHeaps[0];
+            let depth = getDepthForDifficulty();
+            for (let heaps of newHeaps) {
+                let value = alphaBeta(heaps, depth, alpha, beta, true);
+                if (value > evaluateHeaps(bestHeap)) {
+                    bestHeap = heaps
+                }
+            }
+            return bestHeap;
+        };
+
+        const generateNewHeaps = (heaps) => {
+            let newHeaps = [];
+            let separatableHeapIndexes = heaps.map((heap, index) => separatableHeap(heap) ? index : -1).filter(index => index !== -1);
+            for (let i in separatableHeapIndexes) {
+                let heap = heaps[separatableHeapIndexes[i]];
+                for (let separation1 = 1; separation1 <= heap / 2; separation1++) {
+                    let separation2 = heap - separation1;
+                    if (isValidSeparation(heap, separation1)) {
+                        let newHeap = [...heaps];
+                        newHeap.splice(separatableHeapIndexes[i], 1, separation1, separation2);
+                        newHeaps.push(newHeap);
+                    }
+                }
+            }
+
+            return newHeaps;
+        };
+
+        const aiTurn = () => {
+            if (!separatableHeaps(heaps)) {
+                document.getElementById('message').textContent = 'Player Wins! No valid heap to separate.';
+                document.getElementById('player-turn').disabled = true;
+                return;
+            }
+
+            let bestHeaps = getBestPossibleHeap(heaps);
+            heaps = bestHeaps;
+            updateHistory('AI');
+
+            if (!separatableHeaps(heaps)) {
+                document.getElementById('message').textContent = 'AI Wins! No valid heap to separate.';
+                document.getElementById('player-turn').disabled = true;
+            }
+        };
+
+        const playerTurn = () => {
+            if (!separatableHeaps(heaps)) {
+                document.getElementById('message').textContent = 'AI Wins! No valid heap to separate.';
+                document.getElementById('player-turn').disabled = true;
+                return;
+            }
+
+            while (true) {
+                let chosenHeap = parseInt(prompt(`Choose a heap to separate (1 to ${heaps.length}):`));
+                let headIndex = chosenHeap - 1;
+                if (headIndex >= 0 && headIndex < heaps.length && separatableHeap(heaps[headIndex])) {
+                    let heap = heaps[headIndex];
+
+                    while (true) {
+                        let separation1 = parseInt(prompt(`Enter the number of rods for heap 1 (1 to ${heap - 1}):`));
+                        let separation2 = heap - separation1;
+
+                        if (isValidSeparation(heap, separation1)) {
+                            heaps.splice(headIndex, 1, separation1, separation2);
+                            updateHistory('Player');
+                            break; // Break the loop when valid input is provided
+                        } else {
+                            alert('Invalid separation! Choose a valid number for heap 1 to create distinct rod counts.');
+                        }
+                    }
+                    break; // Break the loop when valid input is provided
+                } else {
+                    alert('Invalid heap! Choose a valid heap with at least 3 rods to separate.');
+                }
+            }
+
+            if (!separatableHeaps(heaps)) {
+                document.getElementById('message').textContent = 'Player Wins! No valid heap to separate.';
+                document.getElementById('player-turn').disabled = true;
+            }
+        };
+
+        document.getElementById('player-turn').addEventListener('click', () => {
+            if (separatableHeaps(heaps)) {
+                playerTurn();
+                if (separatableHeaps(heaps)) {
+                    aiTurn();
+                }
+            }
+        });
+
+        const resetGame = () => {
+            document.getElementById('message').textContent = "";
+            historyList.innerHTML = "";
+            document.getElementById('player-turn').disabled = false;
+            initalizeGame();
+        };
+
+        document.getElementById('new-game').addEventListener('click', resetGame);
+        
+        const initalizeGame = () => {
+            heaps = [Math.floor(Math.random() * 10) + 6]; // Initial random heap
+            document.getElementById('heap-size').textContent = heaps[0];
+            let turn = Math.round(Math.random());
+            if (turn) {
+                aiTurn();
+            }
+        };
+
+        initalizeGame();
+    </script>
+</body>
+
+</html>
